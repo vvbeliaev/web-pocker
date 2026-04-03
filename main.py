@@ -1,6 +1,3 @@
-def main():
-    print("Hello from web-poker!")
-
-
-if __name__ == "__main__":
-    main()
+# main.py
+from poker.events import *   # noqa: F401,F403 — registers all socket.io event handlers
+from poker.server import socket_app as app
