@@ -5,17 +5,19 @@
 	let {
 		card,
 		faceDown = false,
-		small = false
+		small = false,
+		highlighted = false
 	}: {
 		card: CardData | null;
 		faceDown?: boolean;
 		small?: boolean;
+		highlighted?: boolean;
 	} = $props();
 
 	const isRed = $derived(card && (card.suit === 'h' || card.suit === 'd'));
 </script>
 
-<div class="card" class:small class:face-down={faceDown || !card} class:red={isRed}>
+<div class="card" class:small class:face-down={faceDown || !card} class:red={isRed} class:highlighted>
 	{#if !faceDown && card}
 		<span class="rank">{card.rank_symbol}</span>
 		<span class="suit">{card.suit_symbol}</span>
@@ -97,6 +99,13 @@
 	.small .rank,
 	.small .suit {
 		font-size: 11px;
+	}
+
+	.card.highlighted {
+		box-shadow:
+			0 0 0 2px rgba(201, 168, 76, 0.75),
+			0 4px 12px rgba(0, 0, 0, 0.8),
+			0 0 18px rgba(201, 168, 76, 0.35);
 	}
 
 	@keyframes flip-in {

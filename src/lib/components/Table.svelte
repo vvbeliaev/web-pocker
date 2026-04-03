@@ -3,6 +3,7 @@
 	import PlayerSeat from './PlayerSeat.svelte';
 	import Card from './Card.svelte';
 	import type { PlayerData, CardData } from '$lib/types';
+	import { evaluateBestHand } from '$lib/evaluator';
 
 	let {
 		players,
@@ -10,7 +11,8 @@
 		pot,
 		actionSid,
 		mySid,
-		myCards
+		myCards,
+		revealedCards = {}
 	}: {
 		players: PlayerData[];
 		communityCards: CardData[];
@@ -18,7 +20,25 @@
 		actionSid: string | null;
 		mySid: string | null;
 		myCards: CardData[];
+		revealedCards?: Record<string, CardData[]>;
 	} = $props();
+
+	// Best hand evaluation for my cards (shown from flop onward)
+	const myHandEval = $derived(
+		myCards.length >= 2 && communityCards.length >= 3
+			? evaluateBestHand([...myCards, ...communityCards])
+			: null
+	);
+	// Indices within myCards that are part of the best 5
+	const holeHighlighted = $derived(
+		myHandEval?.bestIndices.filter((i) => i < myCards.length) ?? []
+	);
+	// Indices within communityCards that are part of the best 5
+	const communityHighlighted = $derived(
+		myHandEval?.bestIndices
+			.filter((i) => i >= myCards.length)
+			.map((i) => i - myCards.length) ?? []
+	);
 
 	// Positions around the ellipse (% from top-left of .felt)
 	// Seat 0 = bottom center (the current player after rotation)
@@ -63,7 +83,7 @@
 				{/if}
 				<div class="community">
 					{#each communityCards as card, i (i)}
-						<Card {card} />
+						<Card {card} highlighted={communityHighlighted.includes(i)} />
 					{/each}
 					{#each { length: 5 - communityCards.length } as _, i (i + 5)}
 						<div class="card-ghost"></div>
@@ -83,6 +103,9 @@
 						isActive={player.sid === actionSid}
 						isMe={player.sid === mySid}
 						myCards={player.sid === mySid ? myCards : null}
+						revealedCards={player.sid !== mySid ? (revealedCards[player.sid] ?? null) : null}
+						handName={player.sid === mySid ? (myHandEval?.name ?? null) : null}
+						highlightedHoleIndices={player.sid === mySid ? holeHighlighted : null}
 					/>
 				</div>
 			{/each}

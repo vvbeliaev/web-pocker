@@ -50,6 +50,7 @@
 		{#each players as player (player.sid)}
 			<li class:ready={player.ready} class:me={player.sid === mySid}>
 				<span class="seat-num">{player.seat + 1}</span>
+				<span class="avatar">{player.avatar ?? '🦊'}</span>
 				<span class="name">{player.name}{player.sid === mySid ? ' (you)' : ''}</span>
 				<span class="status-dot" class:is-ready={player.ready}>
 					{player.ready ? '●' : '○'}
@@ -212,6 +213,11 @@
 		font-size: 10px;
 		color: var(--text-muted, rgba(232, 223, 200, 0.2));
 		min-width: 12px;
+	}
+
+	.avatar {
+		font-size: 1.2rem;
+		line-height: 1;
 	}
 
 	.name {

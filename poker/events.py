@@ -122,6 +122,7 @@ async def _auto_fold_on_timeout(room_id: str, sid: str) -> None:
                 'amount': winner['amount'],
                 'hand_name': winner['hand_name'],
                 'community_cards': result['community_cards'],
+                'hole_cards': result.get('hole_cards', {}),
             }, room=room_id)
         for p in room.players:
             if p.chips == 0 and p.status != PlayerStatus.ELIMINATED:
@@ -172,6 +173,7 @@ async def _auto_fold_disconnected(sid: str, room_id: str) -> None:
                     'amount': winner['amount'],
                     'hand_name': winner['hand_name'],
                     'community_cards': result['community_cards'],
+                    'hole_cards': result.get('hole_cards', {}),
                 }, room=room_id)
             alive = [p for p in room.players if p.status != PlayerStatus.ELIMINATED]
             if len(alive) <= 1:
@@ -215,8 +217,10 @@ async def disconnect(sid: str) -> None:
 
 @sio.event
 async def join_room(sid: str, data: dict) -> None:
+    from poker.game.tournament import ALLOWED_AVATARS, DEFAULT_AVATAR
     room_id: str = data.get('room_id', '')
     name: str = (data.get('name', 'Player') or 'Player')[:20].strip() or 'Player'
+    avatar: str = data.get('avatar', DEFAULT_AVATAR)
 
     room = rooms.get(room_id)
     if not room:
@@ -237,7 +241,7 @@ async def join_room(sid: str, data: dict) -> None:
         return
 
     if not room.get_player(sid):
-        room.add_player(sid=sid, name=name)
+        room.add_player(sid=sid, name=name, avatar=avatar)
 
     await sio.enter_room(sid, room_id)
     await _broadcast_room_state(room)
@@ -298,6 +302,7 @@ async def action(sid: str, data: dict) -> None:
                 'amount': winner['amount'],
                 'hand_name': winner['hand_name'],
                 'community_cards': result['community_cards'],
+                'hole_cards': result.get('hole_cards', {}),
             }, room=room.id)
 
         # Eliminate players with 0 chips

@@ -11,6 +11,7 @@ export interface PlayerData {
 	sid: string;
 	name: string;
 	seat: number;
+	avatar: string;
 	chips: number;
 	ready: boolean;
 	status: 'active' | 'folded' | 'all_in' | 'eliminated';
@@ -48,4 +49,5 @@ export interface HandResult {
 	amount: number;
 	hand_name: string;
 	community_cards: CardData[];
+	hole_cards?: Record<string, CardData[]>;
 }

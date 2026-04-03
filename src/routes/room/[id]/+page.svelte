@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { connectSocket, disconnectSocket } from '$lib/socket';
 	import { gameStore } from '$lib/store.svelte';
+	import { playCardDeal, playChips, playFold, playWin, playHandEnd, playEliminated } from '$lib/sounds';
 	import LobbyWaiting from '$lib/components/LobbyWaiting.svelte';
 	import Table from '$lib/components/Table.svelte';
 	import ActionBar from '$lib/components/ActionBar.svelte';
@@ -13,7 +14,14 @@
 
 	const roomId = $derived(page.params.id ?? '');
 
+	const AVATARS = [
+		'🦊', '🐼', '🦁', '🐯', '🐻', '🐨', '🐸', '🦝', '🦄', '🐺', '🦅', '🐙',
+		'👁️', '👅', '👃', '👂', '🦷', '🦴', '💀', '👾', '🤡', '👺', '👹', '💩',
+		'🫠', '🥴', '🤪', '😵', '🫣', '🧠', '👁️‍🗨️', '🫀', '🫁', '🦶', '👻', '🙈',
+	];
+
 	let name = $state('');
+	let avatar = $state('🦊');
 	let nameSubmitted = $state(false);
 	let lastHandResult = $state<HandResult | null>(null);
 	let showHandResult = $state(false);
@@ -72,7 +80,7 @@
 		if (!name.trim()) return;
 		nameSubmitted = true;
 		const socket = connectSocket();
-		socket.emit('join_room', { room_id: roomId, name: name.trim() });
+		socket.emit('join_room', { room_id: roomId, name: name.trim(), avatar });
 	}
 
 	function handleReady(ready: boolean) {
@@ -109,6 +117,17 @@
 			<div class="join-card">
 				<p class="join-room-code">{roomId.toUpperCase()}</p>
 				<h1>Join Table</h1>
+				<div class="avatar-preview">{avatar}</div>
+				<div class="avatar-grid">
+					{#each AVATARS as emoji}
+						<button
+							type="button"
+							class="avatar-opt"
+							class:selected={avatar === emoji}
+							onclick={() => (avatar = emoji)}
+						>{emoji}</button>
+					{/each}
+				</div>
 				<form onsubmit={(e) => { e.preventDefault(); submitName(); }}>
 					<input
 						bind:value={name}
@@ -280,6 +299,44 @@
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		color: var(--text, #e8dfc8);
+	}
+
+	.avatar-preview {
+		font-size: 3rem;
+		line-height: 1;
+		margin-bottom: 0.25rem;
+	}
+
+	.avatar-grid {
+		display: grid;
+		grid-template-columns: repeat(6, 1fr);
+		gap: 6px;
+		margin-bottom: 0.5rem;
+		max-height: 160px;
+		overflow-y: auto;
+		padding-right: 2px;
+	}
+
+	.avatar-opt {
+		font-size: 1.4rem;
+		background: rgba(10, 10, 20, 0.6);
+		border: 1px solid rgba(201, 168, 76, 0.1);
+		border-radius: 6px;
+		padding: 4px;
+		cursor: pointer;
+		transition: border-color 0.15s, background 0.15s;
+		line-height: 1;
+	}
+
+	.avatar-opt:hover {
+		background: rgba(201, 168, 76, 0.06);
+		border-color: rgba(201, 168, 76, 0.35);
+	}
+
+	.avatar-opt.selected {
+		border-color: var(--gold, #c9a84c);
+		background: rgba(201, 168, 76, 0.1);
+		box-shadow: 0 0 10px rgba(201, 168, 76, 0.2);
 	}
 
 	form {

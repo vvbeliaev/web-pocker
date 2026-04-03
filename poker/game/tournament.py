@@ -35,11 +35,20 @@ class RoomState(Enum):
     FINISHED = 'finished'
 
 
+ALLOWED_AVATARS = frozenset([
+    '🦊', '🐼', '🦁', '🐯', '🐻', '🐨', '🐸', '🦝', '🦄', '🐺', '🦅', '🐙',
+    '👁️', '👅', '👃', '👂', '🦷', '🦴', '💀', '👾', '🤡', '👺', '👹', '💩',
+    '🫠', '🥴', '🤪', '😵', '🫣', '🧠', '👁️‍🗨️', '🫀', '🫁', '🦶', '👻', '🙈',
+])
+DEFAULT_AVATAR = '🦊'
+
+
 @dataclass
 class Player:
     sid: str
     name: str
     seat: int
+    avatar: str = DEFAULT_AVATAR
     chips: int = STARTING_CHIPS
     hole_cards: list[Card] = field(default_factory=list)
     ready: bool = False
@@ -53,6 +62,7 @@ class Player:
             'sid': self.sid,
             'name': self.name,
             'seat': self.seat,
+            'avatar': self.avatar,
             'chips': self.chips,
             'ready': self.ready,
             'status': self.status.value,
@@ -76,9 +86,10 @@ class Room:
     blind_timer_start: float = field(default_factory=time.time)
     current_hand: Optional[object] = None  # Hand instance
 
-    def add_player(self, sid: str, name: str) -> Player:
+    def add_player(self, sid: str, name: str, avatar: str = DEFAULT_AVATAR) -> Player:
         seat = len(self.players)
-        player = Player(sid=sid, name=name, seat=seat)
+        validated_avatar = avatar if avatar in ALLOWED_AVATARS else DEFAULT_AVATAR
+        player = Player(sid=sid, name=name, seat=seat, avatar=validated_avatar)
         self.players.append(player)
         return player
 

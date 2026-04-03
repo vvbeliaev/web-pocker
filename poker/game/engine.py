@@ -269,5 +269,10 @@ class Hand:
         return {
             'winners': merged_summary,
             'community_cards': [c.to_dict() for c in self.community_cards],
+            'hole_cards': {
+                p.sid: [c.to_dict() for c in p.hole_cards]
+                for p in self.players
+                if p.hole_cards
+            },
             'phase': self.phase,
         }

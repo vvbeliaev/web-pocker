@@ -7,15 +7,25 @@
 		player,
 		isActive,
 		myCards = null,
-		isMe = false
+		isMe = false,
+		revealedCards = null,
+		handName = null,
+		highlightedHoleIndices = null
 	}: {
 		player: PlayerData;
 		isActive: boolean;
 		myCards?: CardData[] | null;
 		isMe?: boolean;
+		revealedCards?: CardData[] | null;
+		handName?: string | null;
+		highlightedHoleIndices?: number[] | null;
 	} = $props();
 
-	const displayCards = $derived(isMe && myCards ? myCards : null);
+	const displayCards = $derived(
+		isMe && myCards ? myCards
+		: !isMe && revealedCards ? revealedCards
+		: null
+	);
 	const inHand = $derived(player.status !== 'eliminated' && player.status !== 'folded');
 </script>
 
@@ -27,11 +37,14 @@
 	class:eliminated={player.status === 'eliminated'}
 	class:all-in={player.status === 'all_in'}
 >
+	<!-- Avatar -->
+	<div class="avatar">{player.avatar ?? '🦊'}</div>
+
 	<!-- Hole cards -->
 	<div class="cards-row">
 		{#if displayCards}
-			{#each displayCards as card}
-				<Card {card} small />
+			{#each displayCards as card, i}
+				<Card {card} small highlighted={highlightedHoleIndices?.includes(i) ?? false} />
 			{/each}
 		{:else if inHand}
 			<Card card={null} faceDown small />
@@ -40,6 +53,11 @@
 			<div class="cards-placeholder"></div>
 		{/if}
 	</div>
+
+	<!-- Current hand combination badge (my seat only) -->
+	{#if handName}
+		<div class="hand-name">{handName}</div>
+	{/if}
 
 	<!-- Name + chips -->
 	<div class="info">
@@ -96,6 +114,12 @@
 	.seat.eliminated {
 		opacity: 0.25;
 		filter: grayscale(1);
+	}
+
+	.avatar {
+		font-size: 1.4rem;
+		line-height: 1;
+		margin-bottom: 1px;
 	}
 
 	.cards-row {
@@ -173,5 +197,18 @@
 		background: rgba(100, 80, 60, 0.1);
 		border: 1px solid rgba(100, 80, 60, 0.2);
 		color: rgba(200, 180, 150, 0.4);
+	}
+
+	.hand-name {
+		font-size: 7px;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--gold, #c9a84c);
+		background: rgba(201, 168, 76, 0.08);
+		border: 1px solid rgba(201, 168, 76, 0.25);
+		border-radius: 3px;
+		padding: 1px 6px;
+		white-space: nowrap;
 	}
 </style>
