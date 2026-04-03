@@ -1,0 +1,9 @@
+node_modules
+.venv
+.superpowers
+.git
+__pycache__
+*.pyc
+build
+dist
+.coverage
