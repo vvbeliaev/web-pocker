@@ -147,7 +147,7 @@ class Hand:
             if player.chips == 0:
                 player.status = PlayerStatus.ALL_IN
             # Everyone else needs to act again
-            self._num_to_act = len(self._active_players())
+            self._num_to_act = len(self._active_players()) - 1
 
         elif action == 'all_in':
             delta = player.chips
@@ -165,7 +165,6 @@ class Hand:
         self._action_idx = (self._action_idx + 1) % n
 
         # Check if hand is over (all but one folded)
-        from poker.game.tournament import PlayerStatus
         non_folded = [p for p in self.players
                       if p.status != PlayerStatus.FOLDED
                       and p.status != PlayerStatus.ELIMINATED]

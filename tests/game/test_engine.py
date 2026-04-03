@@ -95,3 +95,82 @@ def test_hand_fold_wins_pot():
     result = hand.apply_action('a', 'fold')
     assert result['winners'][0]['sid'] == 'b'
     assert result['winners'][0]['amount'] == 75
+
+
+def test_hand_call_advances_action():
+    """After both players call/check, hand advances to flop."""
+    players = [make_player('a', 'Alice', 0, chips=1000),
+               make_player('b', 'Bob', 1, chips=1000)]
+    hand = Hand(players=players, dealer_pos=0, small_blind=25, big_blind=50)
+    hand.deal()
+    # Heads-up preflop: dealer(Alice)=SB posted 25, Bob=BB posted 50
+    # Action starts on Alice (left of BB in heads-up = dealer)
+    # Alice calls (50 total)
+    result = hand.apply_action('a', 'call')
+    assert result is None  # hand continues
+    # Bob checks (already at 50)
+    result = hand.apply_action('b', 'call')
+    assert result is None  # hand continues, now on flop
+    assert hand.phase == 'flop'
+    assert len(hand.community_cards) == 3
+
+
+def test_hand_completes_all_streets():
+    """A hand where both players check all streets reaches showdown."""
+    players = [make_player('a', 'Alice', 0, chips=1000),
+               make_player('b', 'Bob', 1, chips=1000)]
+    hand = Hand(players=players, dealer_pos=0, small_blind=25, big_blind=50)
+    hand.deal()
+    # Preflop: Alice calls, Bob checks
+    hand.apply_action('a', 'call')
+    hand.apply_action('b', 'call')
+    assert hand.phase == 'flop'
+    # Flop: both check
+    hand.apply_action('b', 'call')   # Bob acts first post-flop (left of dealer=Alice)
+    hand.apply_action('a', 'call')
+    assert hand.phase == 'turn'
+    # Turn: both check
+    hand.apply_action('b', 'call')
+    hand.apply_action('a', 'call')
+    assert hand.phase == 'river'
+    # River: both check → showdown
+    hand.apply_action('b', 'call')
+    result = hand.apply_action('a', 'call')
+    assert result is not None
+    assert result['phase'] == 'showdown'
+    assert len(result['winners']) >= 1
+    assert len(hand.community_cards) == 5
+
+
+def test_hand_raise_then_call():
+    """Raise forces the other player to act again."""
+    players = [make_player('a', 'Alice', 0, chips=1000),
+               make_player('b', 'Bob', 1, chips=1000)]
+    hand = Hand(players=players, dealer_pos=0, small_blind=25, big_blind=50)
+    hand.deal()
+    # Alice raises to 150
+    result = hand.apply_action('a', 'raise', amount=150)
+    assert result is None
+    # Bob must now call/fold/raise (not auto-advance)
+    assert hand.phase == 'preflop'
+    # Bob calls → round ends, advance to flop
+    result = hand.apply_action('b', 'call')
+    assert result is None
+    assert hand.phase == 'flop'
+
+
+def test_all_in_ends_hand_when_called():
+    """Player goes all-in, opponent calls (also goes all-in), hand runs to showdown."""
+    players = [make_player('a', 'Alice', 0, chips=100),
+               make_player('b', 'Bob', 1, chips=100)]
+    hand = Hand(players=players, dealer_pos=0, small_blind=10, big_blind=20)
+    hand.deal()
+    # Alice goes all-in
+    result = hand.apply_action('a', 'all_in')
+    assert result is None
+    # Bob calls all-in → no more active players, runs to showdown
+    result = hand.apply_action('b', 'call')
+    assert result is not None
+    assert result['phase'] == 'showdown'
+    total_awarded = sum(w['amount'] for w in result['winners'])
+    assert total_awarded > 0
