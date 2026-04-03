@@ -39,6 +39,7 @@ export interface ActionRequired {
 	call_amount: number;
 	min_raise: number;
 	max_raise: number;
+	timeout_seconds: number;
 }
 
 export interface HandResult {

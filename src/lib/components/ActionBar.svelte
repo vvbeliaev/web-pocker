@@ -13,40 +13,72 @@
   } = $props();
 
   let raiseAmount = $state(0);
+  let timeLeft = $state(0);
+  let timerInterval: ReturnType<typeof setInterval> | null = null;
 
   $effect(() => {
-    if (actionRequired) raiseAmount = actionRequired.min_raise;
+    if (actionRequired) {
+      raiseAmount = actionRequired.min_raise;
+      timeLeft = actionRequired.timeout_seconds;
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeLeft = Math.max(0, timeLeft - 1);
+      }, 1000);
+    } else {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
   });
 
   const canRaise = $derived(actionRequired?.options.includes('raise') ?? false);
   const callAmount = $derived(actionRequired?.call_amount ?? 0);
+  const timerPct = $derived(
+    actionRequired ? (timeLeft / actionRequired.timeout_seconds) * 100 : 0
+  );
+  const urgent = $derived(timeLeft <= 10);
 </script>
 
 {#if isMyTurn && actionRequired}
   <div class="action-bar">
-    <button class="btn fold" onclick={() => onAction('fold')}>Fold</button>
+    <div class="timer-track">
+      <div
+        class="timer-bar"
+        class:urgent
+        style="width: {timerPct}%"
+      ></div>
+      <span class="timer-label" class:urgent>{timeLeft}s</span>
+    </div>
 
-    <button class="btn call" onclick={() => onAction('call')}>
-      {callAmount === 0 ? 'Check' : `Call ${callAmount}`}
-    </button>
+    <div class="buttons">
+      <button class="btn fold" onclick={() => onAction('fold')}>Fold</button>
 
-    {#if canRaise}
-      <div class="raise-group">
-        <button class="btn raise" onclick={() => onAction('raise', raiseAmount)}>
-          Raise
-        </button>
-        <input
-          type="number"
-          bind:value={raiseAmount}
-          min={actionRequired.min_raise}
-          max={actionRequired.max_raise}
-          step={actionRequired.min_raise}
-          class="raise-input"
-        />
-      </div>
-    {/if}
+      <button class="btn call" onclick={() => onAction('call')}>
+        {callAmount === 0 ? 'Check' : `Call ${callAmount}`}
+      </button>
 
-    <button class="btn allin" onclick={() => onAction('all_in')}>All In</button>
+      {#if canRaise}
+        <div class="raise-group">
+          <button class="btn raise" onclick={() => onAction('raise', raiseAmount)}>
+            Raise
+          </button>
+          <input
+            type="number"
+            bind:value={raiseAmount}
+            min={actionRequired.min_raise}
+            max={actionRequired.max_raise}
+            step={actionRequired.min_raise}
+            class="raise-input"
+          />
+        </div>
+      {/if}
+
+      <button class="btn allin" onclick={() => onAction('all_in')}>All In</button>
+    </div>
   </div>
 {:else}
   <div class="action-bar waiting">
@@ -57,9 +89,8 @@
 <style>
   .action-bar {
     display: flex;
+    flex-direction: column;
     gap: 8px;
-    align-items: center;
-    justify-content: center;
     padding: 10px 16px;
     background: #0d0d1a;
     border: 1px solid #ffffff10;
@@ -67,9 +98,48 @@
   }
 
   .action-bar.waiting {
+    align-items: center;
+    justify-content: center;
     color: #444;
     font-size: 0.85rem;
     letter-spacing: 0.05em;
+  }
+
+  .timer-track {
+    position: relative;
+    height: 3px;
+    background: #1a1a2e;
+    border-radius: 2px;
+    overflow: visible;
+  }
+
+  .timer-bar {
+    height: 100%;
+    background: #4ade80;
+    border-radius: 2px;
+    transition: width 1s linear, background 0.3s;
+  }
+
+  .timer-bar.urgent { background: #f87171; }
+
+  .timer-label {
+    position: absolute;
+    right: 0;
+    top: -16px;
+    font-size: 10px;
+    color: #4ade80;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    transition: color 0.3s;
+  }
+
+  .timer-label.urgent { color: #f87171; }
+
+  .buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
   }
 
   .btn {

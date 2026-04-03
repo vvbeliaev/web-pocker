@@ -8,11 +8,39 @@ from poker.server import sio, rooms
 from poker.game.tournament import Room, Player, PlayerStatus, RoomState, BLIND_SCHEDULE
 from poker.game.engine import Hand
 
+TURN_TIMEOUT_SECONDS = 30
+
+# Per-room turn timer tasks: room_id → Task
+_turn_timers: dict[str, asyncio.Task] = {}
+
+
+def _cancel_turn_timer(room_id: str) -> None:
+    task = _turn_timers.pop(room_id, None)
+    if task:
+        task.cancel()
+
 
 async def _broadcast_room_state(room: Room) -> None:
     """Send private state (with hole cards) to each player individually."""
     for player in room.players:
         await sio.emit('room_state', room.private_state_for(player.sid), to=player.sid)
+
+
+async def _emit_action_required(room: Room, hand: Hand, current: Player) -> None:
+    """Emit action_required and schedule auto-fold timer."""
+    _, bb = room.current_blinds()
+    _cancel_turn_timer(room.id)
+    _turn_timers[room.id] = asyncio.create_task(
+        _auto_fold_on_timeout(room.id, current.sid)
+    )
+    await sio.emit('action_required', {
+        'player_sid': current.sid,
+        'options': ['fold', 'call', 'raise', 'all_in'],
+        'call_amount': max(0, hand.current_bet - current.street_bet),
+        'min_raise': hand.current_bet + bb,
+        'max_raise': current.chips + current.street_bet,
+        'timeout_seconds': TURN_TIMEOUT_SECONDS,
+    }, room=room.id)
 
 
 async def _start_new_hand(room: Room) -> None:
@@ -41,13 +69,7 @@ async def _start_new_hand(room: Room) -> None:
     await _broadcast_room_state(room)
 
     if current:
-        await sio.emit('action_required', {
-            'player_sid': current.sid,
-            'options': ['fold', 'call', 'raise', 'all_in'],
-            'call_amount': max(0, hand.current_bet - current.street_bet),
-            'min_raise': hand.current_bet + bb,
-            'max_raise': current.chips + current.street_bet,
-        }, room=room.id)
+        await _emit_action_required(room, hand, current)
 
 
 async def _blind_timer_loop(room_id: str) -> None:
@@ -65,7 +87,6 @@ async def _blind_timer_loop(room_id: str) -> None:
             room.blind_level += 1
             room.blind_timer_start = time.time()
             if room.blind_level >= len(BLIND_SCHEDULE) - 1:
-                # Already at max level, no more increases needed
                 sb, bb = room.current_blinds()
                 await sio.emit('blind_up', {'level': room.blind_level, 'sb': sb, 'bb': bb},
                                room=room_id)
@@ -75,6 +96,55 @@ async def _blind_timer_loop(room_id: str) -> None:
             await sio.emit('blind_up', {'level': room.blind_level, 'sb': sb, 'bb': bb},
                            room=room_id)
             await _broadcast_room_state(room)
+
+
+async def _auto_fold_on_timeout(room_id: str, sid: str) -> None:
+    """Auto-fold the current player if they don't act within TURN_TIMEOUT_SECONDS."""
+    await asyncio.sleep(TURN_TIMEOUT_SECONDS)
+    room = rooms.get(room_id)
+    if not room or room.state != RoomState.PLAYING or not room.current_hand:
+        return
+    if room.action_sid != sid:
+        return  # Already acted or turn moved on
+
+    hand: Hand = room.current_hand
+    result = hand.apply_action(sid, 'fold')
+    room.community_cards = hand.community_cards
+    room.current_bet = hand.current_bet
+    room.hand_phase = hand.phase
+    room.pot = sum(p.total_bet_in_hand for p in hand.players)
+
+    if result:
+        for winner in result['winners']:
+            await sio.emit('hand_result', {
+                'winner_sid': winner['sid'],
+                'winner_name': winner['name'],
+                'amount': winner['amount'],
+                'hand_name': winner['hand_name'],
+                'community_cards': result['community_cards'],
+            }, room=room_id)
+        for p in room.players:
+            if p.chips == 0 and p.status != PlayerStatus.ELIMINATED:
+                p.status = PlayerStatus.ELIMINATED
+                await sio.emit('eliminated', {'player_name': p.name}, room=room_id)
+        alive = [p for p in room.players if p.status != PlayerStatus.ELIMINATED]
+        if len(alive) == 1:
+            room.state = RoomState.FINISHED
+            await sio.emit('winner', {'player_name': alive[0].name,
+                                      'player_sid': alive[0].sid}, room=room_id)
+            await _broadcast_room_state(room)
+            return
+        room.dealer_pos = (room.dealer_pos + 1) % len(alive)
+        room.current_hand = None
+        await _broadcast_room_state(room)
+        await asyncio.sleep(3)
+        await _start_new_hand(room)
+    else:
+        current = hand.current_player()
+        room.action_sid = current.sid if current else None
+        await _broadcast_room_state(room)
+        if current:
+            await _emit_action_required(room, hand, current)
 
 
 async def _auto_fold_disconnected(sid: str, room_id: str) -> None:
@@ -89,6 +159,7 @@ async def _auto_fold_disconnected(sid: str, room_id: str) -> None:
         return  # reconnected or already eliminated
     # Only act if it's their turn
     if room.action_sid == sid and room.current_hand:
+        _cancel_turn_timer(room_id)
         result = room.current_hand.apply_action(sid, 'fold')
         room.hand_phase = room.current_hand.phase
         room.community_cards = room.current_hand.community_cards
@@ -119,6 +190,8 @@ async def _auto_fold_disconnected(sid: str, room_id: str) -> None:
             current = room.current_hand.current_player()
             room.action_sid = current.sid if current else None
             await _broadcast_room_state(room)
+            if current:
+                await _emit_action_required(room, room.current_hand, current)
 
 
 @sio.event
@@ -206,6 +279,8 @@ async def action(sid: str, data: dict) -> None:
     if room.action_sid != sid:
         return  # Not your turn
 
+    _cancel_turn_timer(room.id)
+
     result = hand.apply_action(sid, action_type, amount)
 
     # Sync room state from hand
@@ -253,13 +328,6 @@ async def action(sid: str, data: dict) -> None:
         # Hand continues — update whose turn it is
         current = hand.current_player()
         room.action_sid = current.sid if current else None
-        sb, bb = room.current_blinds()
         await _broadcast_room_state(room)
         if current:
-            await sio.emit('action_required', {
-                'player_sid': current.sid,
-                'options': ['fold', 'call', 'raise', 'all_in'],
-                'call_amount': max(0, hand.current_bet - current.street_bet),
-                'min_raise': hand.current_bet + bb,
-                'max_raise': current.chips + current.street_bet,
-            }, room=room.id)
+            await _emit_action_required(room, hand, current)
