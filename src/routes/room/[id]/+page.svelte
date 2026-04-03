@@ -25,6 +25,7 @@
 	let nameSubmitted = $state(false);
 	let lastHandResult = $state<HandResult | null>(null);
 	let showHandResult = $state(false);
+	let revealedCards = $state<Record<string, import('$lib/types').CardData[]>>({});
 
 	const BLIND_DURATIONS = [180, 180, 120, 120, 120, 120, 120, 120];
 
@@ -37,7 +38,22 @@
 		});
 
 		socket.on('room_state', (state: RoomState) => {
+			const prev = gameStore.roomState;
 			gameStore.roomState = state;
+
+			// New hole cards dealt (hand start)
+			if (state.my_cards.length === 2 && (prev?.my_cards.length ?? 0) === 0) {
+				playCardDeal();
+				setTimeout(playCardDeal, 110);
+			}
+			// New community cards revealed
+			const prevCount = prev?.community_cards.length ?? 0;
+			const newCount = state.community_cards.length;
+			if (newCount > prevCount) {
+				for (let i = 0; i < newCount - prevCount; i++) {
+					setTimeout(playCardDeal, i * 110);
+				}
+			}
 		});
 
 		socket.on('action_required', (data: ActionRequired) => {
@@ -48,13 +64,21 @@
 			lastHandResult = data;
 			showHandResult = true;
 			gameStore.actionRequired = null;
+			if (data.hole_cards) revealedCards = data.hole_cards;
+			if (data.winner_sid === gameStore.mySid) {
+				playWin();
+			} else {
+				playHandEnd();
+			}
 			setTimeout(() => {
 				showHandResult = false;
+				revealedCards = {};
 			}, 3500);
 		});
 
 		socket.on('eliminated', ({ player_name }: { player_name: string }) => {
 			gameStore.eliminatedName = player_name;
+			playEliminated();
 			setTimeout(() => {
 				gameStore.eliminatedName = null;
 			}, 3000);
@@ -89,6 +113,8 @@
 	}
 
 	function handleAction(type: string, amount?: number) {
+		if (type === 'fold') playFold();
+		else playChips();
 		const socket = connectSocket();
 		socket.emit('action', { type, amount: amount ?? 0 });
 		gameStore.actionRequired = null;
@@ -189,6 +215,7 @@
 					actionSid={roomState.action_sid}
 					mySid={gameStore.mySid}
 					myCards={roomState.my_cards}
+					{revealedCards}
 				/>
 			</main>
 
