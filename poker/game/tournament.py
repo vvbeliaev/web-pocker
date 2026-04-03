@@ -85,6 +85,7 @@ class Room:
     current_bet: int = 0
     blind_level: int = 0
     blind_timer_start: float = field(default_factory=time.time)
+    created_at: float = field(default_factory=time.time)
     current_hand: Optional[object] = None  # Hand instance
 
     def add_player(self, sid: str, name: str, avatar: str = DEFAULT_AVATAR, player_id: str = '') -> Player:

@@ -1,13 +1,16 @@
 # poker/server.py
 from __future__ import annotations
+import asyncio
+import time
 import socketio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import HTTPException
 import os
 
-from poker.game.tournament import Room
+from poker.game.tournament import Room, RoomState
 
 # In-memory room registry: room_id → Room
 rooms: dict[str, Room] = {}
@@ -20,8 +23,32 @@ sio = socketio.AsyncServer(
     engineio_logger=False,
 )
 
+_ROOM_WAITING_TTL = 30 * 60   # 30 min — abandon waiting rooms
+_CLEANUP_INTERVAL = 5 * 60    # run every 5 min
+
+
+async def _cleanup_rooms() -> None:
+    while True:
+        await asyncio.sleep(_CLEANUP_INTERVAL)
+        now = time.time()
+        stale = [
+            rid for rid, r in list(rooms.items())
+            if r.state == RoomState.FINISHED
+            or not r.players
+            or (r.state == RoomState.WAITING and now - r.created_at > _ROOM_WAITING_TTL)
+        ]
+        for rid in stale:
+            rooms.pop(rid, None)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    asyncio.create_task(_cleanup_rooms())
+    yield
+
+
 # FastAPI app
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 
 @app.post("/api/rooms")
